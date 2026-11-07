@@ -19,8 +19,8 @@
 ## 训练配置
 
 - HQ: `options/train_FeMaSR_HQ_wavelet2.yml`。从头训练新的双码本 HQ 网络。
-- LQ: `options/train_FeMaSR_LQ_wavelet2.yml`。只能加载上述 HQ 配置产出的 `net_g_latest.pth`；不能加载官方单码本 HQ 权重。
-- 两个码本各有 512 个、512 维码字，embedding 参数总量等于原版一个 1024×512 码本。HQ 已于 2026-11-07 训练至 200,000 步（从 120,000 步断点续训）；LQ 阶段尚未启动，上限待定。每 5,000 步保存断点，实际停止点应结合验证曲线决定。
+- LQ: `options/train_FeMaSR_LQ_wavelet2.yml`。加载上述 HQ 配置产出的 `net_g_200000.pth`；不能加载官方单码本 HQ 权重。
+- 两个码本各有 512 个、512 维码字，embedding 参数总量等于原版一个 1024×512 码本。HQ 已于 2026-11-07 训练至 200,000 步（从 120,000 步断点续训）；LQ 阶段于 2026-11-08 从零启动，目标 200,000 步。每 5,000 步保存断点，实际停止点应结合验证曲线决定。
 - HQ 教师在 LQ 训练时提供七张对应子带的索引图。LQ 自己仍按最近邻选码，教师索引仅参与监督。
 
 ### 当前云端数据来源与读取方式
@@ -36,7 +36,7 @@ Linux 云端启动示例（在本仓库根目录；先核对 YAML 中的数据�
 
 ```bash
 PYTHONPATH="$PWD" python -m basicsr.train -opt options/train_FeMaSR_HQ_wavelet2.yml
-# HQ 保存 net_g_latest.pth 后，再运行：
+# HQ 保存 net_g_200000.pth 后，再运行：
 PYTHONPATH="$PWD" python -m basicsr.train -opt options/train_FeMaSR_LQ_wavelet2.yml
 ```
 

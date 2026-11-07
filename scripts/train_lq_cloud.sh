@@ -3,7 +3,7 @@ set -euo pipefail
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 PYTHON_BIN=${PYTHON_BIN:-/root/miniconda3/envs/freqvq/bin/python}
 cd "$REPO"
-test -f experiments/008_FeMaSR_HQ_wavelet2/models/net_g_latest.pth || {
+test -f experiments/008_FeMaSR_HQ_wavelet2/models/net_g_200000.pth || {
   echo 'HQ checkpoint is missing; finish HQ training first.' >&2
   exit 1
 }

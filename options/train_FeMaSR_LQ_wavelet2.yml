@@ -73,7 +73,7 @@ network_d:
 # path
 path:
   # 只能加载本项目新训练的双码本 HQ 权重，不能沿用官方单码本 HQ 权重。
-  pretrain_network_hq: ./experiments/008_FeMaSR_HQ_wavelet2/models/net_g_latest.pth
+  pretrain_network_hq: ./experiments/008_FeMaSR_HQ_wavelet2/models/net_g_200000.pth
   pretrain_network_g: ~
   pretrain_network_d: ./experiments/pretrained_models/FeMaSR_HRP_model_d.pth
   strict_load: false # HQ 的可选语义模块与 LQ 教师不同；代码会单独严格检查两个码本。
@@ -99,7 +99,7 @@ train:
     milestones: [50000, 100000, 150000, 200000, 250000, 300000, 350000]
     gamma: 1
 
-  total_iter: 2000000
+  total_iter: 200000
   warmup_iter: -1  # no warm up
 
   # losses
