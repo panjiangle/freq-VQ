@@ -1,0 +1,127 @@
+# freq-VQ: FeMaSR 小波双码本研究代码
+
+本仓库基于 [FeMaSR 官方实现](https://github.com/chaofengc/FeMaSR) 修改，保留原始许可。当前实验在 FeMaSR 的 32×32 特征进入码本前执行两轮 Haar DWT，分别量化 LL2 与 D1/D2，再经两轮 IDWT 送入原解码器。
+
+- [模型改动、数据流及验证图说明](WAVELET_VQ_README.md)
+- [云端训练与续训说明](CLOUD_TRAINING.md)
+- [FeMaSR 官方调用链导读](docs/FeMaSR_官方调用链导读.md)
+
+截至 2026-11-07，HQ 表示网络已训练 200,000 步；LQ 超分阶段尚未训练。数据集、模型权重与验证图保存在本地及云端实验目录，未纳入代码仓库。
+
+---
+
+# FeMaSR 
+
+This is the official PyTorch codes for the paper  
+[Real-World Blind Super-Resolution via Feature Matching with Implicit High-Resolution Priors (MM22 Oral)](https://arxiv.org/abs/2202.13142)  
+[Chaofeng Chen\*](https://chaofengc.github.io), [Xinyu Shi\*](https://github.com/Xinyu-Shi), [Yipeng Qin](http://yipengqin.github.io/), [Xiaoming Li](https://csxmli2016.github.io/), [Xiaoguang Han](https://mypage.cuhk.edu.cn/academics/hanxiaoguang/), [Tao Yang](https://github.com/yangxy), [Shihui Guo](http://guoshihui.net/)   
+(\* indicates equal contribution)
+
+[![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)](https://arxiv.org/abs/2202.13142)
+<a href="https://colab.research.google.com/drive/1Yzb4o5OKjK46jbQ-_HGFOVJOPMVtJQjw?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="google colab logo"></a> 
+[![wandb](https://img.shields.io/badge/Weights_&_Biases-FFBE00?&logo=WeightsAndBiases&logoColor=white)](https://wandb.ai/chaofeng/FeMaSR?workspace=user-chaofeng)
+![visitors](https://visitor-badge.laobi.icu/badge?page_id=chaofengc/FeMaSR)
+[![LICENSE](https://img.shields.io/badge/LICENSE-CC%20BY--NC--SA%204.0-lightgrey)](https://github.com/chaofengc/FeMaSR/blob/main/LICENSE)
+
+![framework_img](framework_overview.png)
+
+### Update
+
+- **2022.10.10** Release reproduce training log for SR stage in [![wandb](https://img.shields.io/badge/Weights_&_Biases-FFBE00?&logo=WeightsAndBiases&logoColor=white)](https://wandb.ai/chaofeng/FeMaSR?workspace=user-chaofeng). Reach similar performance as the paper, `LPIPS: 0.329 @415k` for div2k (x4).
+- **2022.09.26** Add example training log with 70k iterations [![wandb](https://img.shields.io/badge/Weights_&_Biases-FFBE00?&logo=WeightsAndBiases&logoColor=white)](https://wandb.ai/chaofeng/FeMaSR?workspace=user-chaofeng)
+- **2022.09.23** Add colab demo <a href="https://colab.research.google.com/drive/1Yzb4o5OKjK46jbQ-_HGFOVJOPMVtJQjw?usp=sharing"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="google colab logo"></a>  
+- **2022.07.02**  
+      - Update codes of the new version FeMaSR   
+      - Please find the old QuanTexSR in the `quantexsr` branch
+
+Here are some example results on test images from [BSRGAN](https://github.com/cszn/BSRGAN) and [RealESRGAN](https://github.com/xinntao/Real-ESRGAN).
+
+---
+
+**Left**: [real images](./testset) **|** **Right**: [super-resolved images with scale factor 4](./results)
+
+<img src="testset/butterfly.png" width="390px"/> <img src="results_x4/butterfly.png" width="390px"/>
+<img src="testset/0003.jpg" width="390px"/> <img src="results_x4/0003.jpg" width="390px"/>
+<img src="testset/00003.png" width="390px"/> <img src="results_x4/00003.png" width="390px"/>
+<img src="testset/Lincoln.png" width="390px"/> <img src="results_x4/Lincoln.png" width="390px"/>
+<img src="testset/0014.jpg" width="390px"/> <img src="results_x4/0014.jpg" width="390px"/>
+
+<!-- <img src="testset/butterfly.png" width="156"/> <img src="results/butterfly.png" width="624px"/>
+<img src="testset/0003.jpg" width="156px"/> <img src="results/0003.jpg" width="624px"/>
+<img src="testset/00003.png" width="156px"/> <img src="results/00003.png" width="624px"/>
+<img src="testset/Lincoln.png" width="156px"/> <img src="results/Lincoln.png" width="624px"/>
+<img src="testset/0014.jpg" width="156px"/> <img src="results/0014.jpg" width="624px"/> -->
+
+
+## Dependencies and Installation
+
+- Ubuntu >= 18.04
+- CUDA >= 11.0
+- Other required packages in `requirements.txt`
+```
+# git clone this repository
+git clone https://github.com/chaofengc/FeMaSR.git
+cd FeMaSR 
+
+# create new anaconda env
+conda create -n femasr python=3.8
+source activate femasr 
+
+# install python dependencies
+pip3 install -r requirements.txt
+python setup.py develop
+```
+
+## Quick Inference
+
+```
+python inference_femasr.py -s 4 -i ./testset -o results_x4/
+python inference_femasr.py -s 2 -i ./testset -o results_x2/
+```
+
+## Train the model
+
+### Preparation
+
+#### Dataset
+
+Please prepare the training and testing data follow descriptions in the main paper and supplementary material. In brief, you need to crop 512 x 512 high resolution patches, and generate the low resolution patches with [`degradation_bsrgan`](https://github.com/cszn/BSRGAN/blob/3a958f40a9a24e8b81c3cb1960f05b0e91f1b421/utils/utils_blindsr.py?_pjax=%23js-repo-pjax-container%2C%20div%5Bitemtype%3D%22http%3A%2F%2Fschema.org%2FSoftwareSourceCode%22%5D%20main%2C%20%5Bdata-pjax-container%5D#L432) function provided by [BSRGAN](https://github.com/cszn/BSRGAN). While the synthetic testing LR images are generated by the [`degradation_bsrgan_plus`](https://github.com/cszn/BSRGAN/blob/3a958f40a9a24e8b81c3cb1960f05b0e91f1b421/utils/utils_blindsr.py?_pjax=%23js-repo-pjax-container%2C%20div%5Bitemtype%3D%22http%3A%2F%2Fschema.org%2FSoftwareSourceCode%22%5D%20main%2C%20%5Bdata-pjax-container%5D#L524) function for fair comparison.
+
+#### Model preparation
+
+Before training, you need to
+- Download the pretrained HRP model: [generator](https://github.com/chaofengc/FeMaSR/releases/download/v0.1-pretrain_models/FeMaSR_HRP_model_g.pth), [discriminator](https://github.com/chaofengc/FeMaSR/releases/download/v0.1-pretrain_models/FeMaSR_HRP_model_d.pth) 
+- Put the pretrained models in `experiments/pretrained_models`
+- Specify their path in the corresponding option file.
+
+### Train SR model
+
+```
+python basicsr/train.py -opt options/train_FeMaSR_LQ_stage.yml
+```
+
+### Model pretrain
+
+In case you want to pretrain your own HRP model, we also provide the training option file:
+
+```
+python basicsr/train.py -opt options/train_FeMaSR_HQ_pretrain_stage.yml
+```
+
+## Citation
+```
+@inproceedings{chen2022femasr,
+      author={Chaofeng Chen and Xinyu Shi and Yipeng Qin and Xiaoming Li and Xiaoguang Han and Tao Yang and Shihui Guo},
+      title={Real-World Blind Super-Resolution via Feature Matching with Implicit High-Resolution Priors}, 
+      year={2022},
+      Journal = {ACM International Conference on Multimedia},
+}
+```
+
+## License
+
+<a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc-sa/4.0/88x31.png" /></a><br />This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc-sa/4.0/">Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License</a>.
+
+## Acknowledgement
+
+This project is based on [BasicSR](https://github.com/xinntao/BasicSR).

@@ -1,0 +1,159 @@
+# ==================== WAVELET-VQ HQ CONFIG: 新增的双码本训练配置 ====================
+# general settings
+name: 008_FeMaSR_HQ_wavelet2
+# name: debug_FeMaSR
+model_type: FeMaSRModel
+scale: 4
+num_gpu: 1 # 单张 4090；训练步数与数据配置沿用官方文件，另行确定实验预算。
+manual_seed: 0
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: General_Image_Train
+    # >>> WAVELET-VQ CHANGE 22 BEGIN: official paired DIV2K x4, no synthetic degradation.
+    type: PairedImageDataset
+    dataroot_gt: ../datasets/DF2K_official/train_HR
+    dataroot_lq: ../datasets/DF2K_official/train_LR_x4
+    paired_by_stem: true
+    align_gt_to_lq: true
+    paired_crop_only: true
+    io_backend:
+      type: disk
+
+    gt_size: 256
+    use_resize_crop: false
+    use_flip: true
+    use_rot: true
+
+    # data loader
+    use_shuffle: true
+    batch_size_per_gpu: &bsz 8
+    num_worker_per_gpu: *bsz
+    dataset_enlarge_ratio: 1
+
+    prefetch_mode: cpu
+    num_prefetch_queue: *bsz
+
+  val:
+    name: General_Image_Valid
+    type: PairedImageDataset
+    dataroot_gt: ../datasets/DF2K_official/val_HR
+    dataroot_lq: ../datasets/DF2K_official/val_LR_x4
+    paired_by_stem: true
+    align_gt_to_lq: true
+    crop_eval_size: 512
+    eval_crop_mode: center
+    io_backend:
+      type: disk
+    # <<< WAVELET-VQ CHANGE 22 END
+
+# network structures
+network_g:
+  type: FeMaSRNet
+  gt_resolution: 256
+  norm_type: 'gn'
+  act_type: 'silu'
+  use_semantic_loss: true
+  # [WaveletVQ] 32 是解码起点；LL2 用 512x512，D1/D2 共用另一个 512x512 码本。
+  # 两套码本合计的 embedding 参数量与原版 1024x512 相同。
+  codebook_params:
+    - [32, 512, 512]
+  wavelet_vq: true
+  detail_codebook_size: 512
+
+  # for HQ stage training
+  LQ_stage: false
+  use_quantize: true
+
+network_d:
+  type: UNetDiscriminatorSN
+  num_in_ch: 3
+
+# path
+path:
+  # pretrain_network_g: ./experiments/pretrained_models/QuanTexSR/pretrain_semantic_vqgan_net_g_latest.pth
+  # pretrain_network_d: ~
+  # pretrain_network_g: ./experiments/004_FeMaSR_HQ_stage/models/net_g_best_.pth
+  # pretrain_network_d: ./experiments/004_FeMaSR_HQ_stage/models/net_d_best_.pth
+  strict_load: false
+  # resume_state: ~
+
+# training settings
+train:
+  optim_g:
+    type: Adam
+    lr: !!float 1e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+  optim_d:
+    type: Adam
+    lr: !!float 4e-4
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [50000, 100000, 150000, 200000, 250000, 300000, 350000]
+    gamma: 1
+
+  total_iter: 200000 # 本次 HQ 训练总上限；从 120000.state 断点续训至 20 万步。
+  warmup_iter: -1  # no warm up
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+
+  perceptual_opt:
+    type: LPIPSLoss
+    loss_weight: !!float 1.0
+
+  gan_opt:
+    type: GANLoss
+    gan_type: hinge
+    real_label_val: 1.0
+    fake_label_val: 0.0
+    loss_weight: 0.1
+
+  codebook_opt:
+    loss_weight: 1.0
+
+  semantic_opt:
+    loss_weight: 0.1
+
+  net_d_iters: 1
+  net_d_init_iters: !!float 0
+
+# validation settings·
+val:
+  val_freq: !!float 5e3
+  save_img: false
+  wavelet_vis_max_samples: 1 # 每轮验证保存首张样本的 LL2 和 D2 量化前/后图。
+  wavelet_vis_save_raw: false # 需要原始 512 通道张量时再打开，避免长期训练占满磁盘。
+
+  key_metric: lpips
+  metrics:
+    psnr: # metric name, not used in this codebase
+      type: psnr
+      crop_border: 4
+      test_y_channel: true
+      color_space: ycbcr
+    ssim:
+      type: ssim
+      crop_border: 4
+      test_y_channel: true
+      color_space: ycbcr
+    lpips:
+      type: lpips
+      better: lower
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 5e3 # 保存模型+优化器状态，可断点续训。
+  save_latest_freq: !!float 5e3
+  keep_last_checkpoints: 3 # 保留最近三个完整断点，避免 50 GB 数据盘被长期训练填满。
+  show_tf_imgs_freq: !!float 1e3
+  use_tb_logger: true
