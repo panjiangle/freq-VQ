@@ -4,7 +4,6 @@ import glob
 import os
 from tqdm import tqdm
 import torch
-from yaml import load
 
 from basicsr.utils import img2tensor, tensor2img, imwrite 
 from basicsr.archs.femasr_arch import FeMaSRNet 
@@ -35,9 +34,37 @@ def main():
     else:
         weight_path = args.weight
     
-    # set up the model
-    sr_model = FeMaSRNet(codebook_params=[[32, 1024, 512]], LQ_stage=True, scale_factor=args.out_scale).to(device)
-    sr_model.load_state_dict(torch.load(weight_path)['params'], strict=False)
+    # WAVELET-VQ CHANGE: infer the two-codebook architecture from an LQ checkpoint.
+    # An HQ checkpoint has a different encoder and is not valid for SR inference.
+    checkpoint = torch.load(weight_path, map_location='cpu', weights_only=False)
+    params = checkpoint['params']
+    params = {(key[7:] if key.startswith('module.') else key): value
+              for key, value in params.items()}
+    ll_key = 'quantize_group.0.embedding.weight'
+    detail_key = 'quantize_group.1.embedding.weight'
+    wavelet_vq = detail_key in params and 'before_quant_group.1.weight' not in params
+    if wavelet_vq:
+        ll_codes, code_dim = params[ll_key].shape
+        detail_codes, detail_dim = params[detail_key].shape
+        if code_dim != 512 or detail_dim != code_dim:
+            raise ValueError('Wavelet VQ checkpoint requires two 512-dimensional codebooks')
+        sr_model = FeMaSRNet(
+            codebook_params=[[32, ll_codes, code_dim]],
+            detail_codebook_size=detail_codes,
+            wavelet_vq=True,
+            LQ_stage=True,
+            scale_factor=args.out_scale,
+        ).to(device)
+    else:
+        sr_model = FeMaSRNet(codebook_params=[[32, 1024, 512]],
+                             LQ_stage=True, scale_factor=args.out_scale).to(device)
+    try:
+        sr_model.load_state_dict(params, strict=wavelet_vq)
+    except RuntimeError as exc:
+        if wavelet_vq:
+            raise RuntimeError('Cannot load wavelet checkpoint for SR. Use an LQ-stage '
+                               'net_g checkpoint; the HQ tokenizer has a different encoder.') from exc
+        raise
     sr_model.eval()
     
     os.makedirs(args.output, exist_ok=True)

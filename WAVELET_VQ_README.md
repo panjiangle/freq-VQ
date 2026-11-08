@@ -50,6 +50,18 @@ PYTHONPATH="$PWD" python -m basicsr.train -opt options/train_FeMaSR_LQ_wavelet2.
 
 若需分析完整系数，把 `wavelet_vis_save_raw` 改为 `true`，会额外保存量化前后的四组 512 通道张量；长期训练默认关闭以节省空间。
 
+## LQ 推理与评测口径
+
+`inference_femasr.py` 会根据 LQ 权重中的两套码本自动启用小波模式；官方单码本权重仍走原版路径。推理需使用 LQ 阶段的 `net_g_*.pth`，HQ 的 `net_g_200000.pth` 是 HR tokenizer，编码器与 SR 网络不同，不能直接用于 LR→SR 推理。
+
+```bash
+python inference_femasr.py -s 4 -i /path/to/LR_images \
+  -w experiments/015_FeMaSR_LQ_wavelet2/models/net_g_best_.pth \
+  -o /path/to/SR_images
+```
+
+本实验的配对 LR 来自 DIV2K 官方 ×4 bicubic 文件及 Flickr2K 配对镜像；“配对”说明每张 LR 有对应 HR，不说明退化类型。FeMaSR 官方论文复现说明使用 BSRGAN 生成训练 LR、BSRGAN+ 生成合成测试 LR；当前 bicubic 训练和中心 512×512 裁剪验证与其协议不同，因此当前指标不能直接与论文表格比较。严格架构对照应让原版 FeMaSR 在同一配对数据、裁剪、训练步数和指标实现下重训。来源：[DIV2K 官方数据说明](https://data.vision.ee.ethz.ch/cvl/DIV2K/)、[FeMaSR 官方训练说明](https://github.com/chaofengc/FeMaSR#train-the-model)。
+
 ## 本地功能检查
 
 `tests/test_wavelet_vq_smoke.py` 检查两轮 DWT/IDWT 的可逆性与梯度、HQ/LQ 前向和反向、七张教师索引、原版单码本入口，以及真实一次验证是否写出拼图。此检查不代表模型已训练收敛或超分质量已提高。
